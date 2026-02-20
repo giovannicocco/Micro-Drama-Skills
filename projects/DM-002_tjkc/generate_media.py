@@ -37,9 +37,9 @@ def load_api_config():
     base_url = None
     image_model = DEFAULT_IMAGE_MODEL
 
-    config_path = Path("/data/dongman/.config/api_keys.json")
+    config_path = PROJECT_DIR.parent.parent / ".config" / "api_keys.json"
     if config_path.exists():
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config = json.load(f)
         api_key = config.get("gemini_api_key")
         # 兼容两种字段名
@@ -461,177 +461,76 @@ def generate_storyboards_for_two_episodes(ep_payloads: list, char_uploaded: dict
     return results
 
 
-# ========== Phase 3: 视频生成（使用 REST API 直接调用） ==========
-
-def _video_api_request(method: str, path: str, body: dict = None) -> dict:
-    """直接通过 REST API 调用视频生成接口"""
-    api_base = base_url.rstrip("/") if base_url else "https://generativelanguage.googleapis.com"
-    url = f"{api_base}/v1beta/models/{path}"
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": api_key,
-    }
-    if method == "post":
-        resp = requests.post(url, json=body, headers=headers, timeout=60)
-    else:
-        resp = requests.get(url, headers=headers, timeout=60)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def _poll_operation(op_name: str, max_wait: int = 600) -> dict:
-    """轮询 LRO 操作直到完成"""
-    api_base = base_url.rstrip("/") if base_url else "https://generativelanguage.googleapis.com"
-    url = f"{api_base}/v1beta/{op_name}"
-    headers = {"x-goog-api-key": api_key}
-    elapsed = 0
-    while elapsed < max_wait:
-        resp = requests.get(url, headers=headers, timeout=60)
-        resp.raise_for_status()
-        data = resp.json()
-        if data.get("done"):
-            return data
-        time.sleep(15)
-        elapsed += 15
-        print(f"  ⏳ 视频生成中... ({elapsed}s)")
-    return {"done": False, "error": "timeout"}
-
-
-def _download_video(video_uri: str, output_path: str) -> bool:
-    """下载生成的视频文件"""
-    try:
-        # video_uri 可能是 files/xxx 格式，需要拼出完整下载 URL
-        api_base = base_url.rstrip("/") if base_url else "https://generativelanguage.googleapis.com"
-        if video_uri.startswith("http"):
-            download_url = video_uri
-        else:
-            # 使用 files API 下载
-            download_url = f"{api_base}/v1beta/{video_uri}:download?alt=media"
-        headers = {"x-goog-api-key": api_key}
-        resp = requests.get(download_url, headers=headers, timeout=300, stream=True)
-        resp.raise_for_status()
-        with open(output_path, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=8192):
-                f.write(chunk)
-        return True
-    except Exception as e:
-        print(f"  ⚠️ 视频下载失败: {e}")
-        # 尝试用 SDK 下载
-        try:
-            from google.genai.types import FileData
-            client.files.download(file=video_uri, download_path=output_path)
-            return True
-        except Exception as e2:
-            print(f"  ⚠️ SDK 下载也失败: {e2}")
-            return False
-
+# ========== Phase 3: 视频生成（使用 SDK） ==========
 
 def generate_video(prompt: str, output_path: str) -> bool:
-    """调用 Veo 生成视频（纯文本） - 使用 REST API"""
+    """调用 Veo 生成视频（纯文本） - 使用 SDK"""
     try:
-        body = {
-            "instances": [{"prompt": prompt}],
-            "parameters": {
-                "aspectRatio": "9:16",
-                "personGeneration": "allow_adult",
-            }
-        }
-        result = _video_api_request("post", "veo3.1-components:predictLongRunning", body)
+        operation = client.models.generate_videos(
+            model="veo-2.0-generate-001",
+            prompt=prompt,
+            config=types.GenerateVideosConfig(
+                person_generation="ALLOW_ADULT",
+                aspect_ratio="9:16",
+            ),
+        )
+        max_wait = 600
+        elapsed = 0
+        while not operation.done:
+            time.sleep(15)
+            elapsed += 15
+            if elapsed > max_wait:
+                print(f"  ⏳ 视频超时: {Path(output_path).name}")
+                return False
+            operation = client.operations.get(operation)
+            print(f"  ⏳ 视频生成中... ({elapsed}s)")
 
-        op_name = result.get("name")
-        if not op_name:
-            print(f"  ⚠️ 未获取到操作 ID: {json.dumps(result, ensure_ascii=False)[:200]}")
-            return False
-
-        print(f"  📋 操作: {op_name}")
-        data = _poll_operation(op_name)
-
-        if not data.get("done"):
-            print(f"  ⏳ 视频超时: {Path(output_path).name}")
-            return False
-
-        # 提取视频
-        response = data.get("response", {})
-        videos = response.get("generateVideoResponse", {}).get("generatedSamples", [])
-        if not videos:
-            videos = response.get("generatedVideos", [])
-        if not videos:
-            print(f"  ⚠️ 视频无结果: {json.dumps(data, ensure_ascii=False)[:300]}")
-            return False
-
-        video_uri = videos[0].get("video", {}).get("uri", "") or videos[0].get("video", {}).get("name", "")
-        if not video_uri:
-            print(f"  ⚠️ 无视频 URI: {json.dumps(videos[0], ensure_ascii=False)[:200]}")
-            return False
-
-        if _download_video(video_uri, output_path):
+        if operation.response and operation.response.generated_videos:
+            video = operation.response.generated_videos[0]
+            client.files.download(file=video.video, download_path=output_path)
             print(f"  ✅ 视频已保存: {Path(output_path).name}")
             return True
-        return False
-
-    except requests.HTTPError as e:
-        print(f"  ❌ 视频 API 错误: {e.response.status_code} - {e.response.text[:300]}")
-        return False
+        else:
+            print(f"  ⚠️ 视频无结果: {Path(output_path).name}")
+            return False
     except Exception as e:
         print(f"  ❌ 视频失败: {e}")
         return False
 
 
 def generate_video_with_image(prompt: str, image_path: str, output_path: str) -> bool:
-    """调用 Veo 使用参考图生成视频（图生视频） - 使用 REST API"""
+    """调用 Veo 使用参考图生成视频（图生视频） - 使用 SDK"""
     try:
-        with open(image_path, "rb") as fh:
-            file_bytes = fh.read()
-        img_b64 = base64.b64encode(file_bytes).decode("utf-8")
+        image_file = client.files.upload(file=image_path)
 
-        body = {
-            "instances": [{
-                "prompt": prompt,
-                "image": {
-                    "bytesBase64Encoded": img_b64,
-                    "mimeType": "image/png"
-                }
-            }],
-            "parameters": {
-                "aspectRatio": "9:16",
-                "personGeneration": "allow_adult",
-            }
-        }
-        result = _video_api_request("post", "veo3.1-components:predictLongRunning", body)
+        operation = client.models.generate_videos(
+            model="veo-2.0-generate-001",
+            prompt=prompt,
+            image=image_file,
+            config=types.GenerateVideosConfig(
+                person_generation="ALLOW_ADULT",
+                aspect_ratio="9:16",
+            ),
+        )
+        max_wait = 600
+        elapsed = 0
+        while not operation.done:
+            time.sleep(15)
+            elapsed += 15
+            if elapsed > max_wait:
+                print(f"  ⏳ 图生视频超时: {Path(output_path).name}")
+                return False
+            operation = client.operations.get(operation)
+            print(f"  ⏳ 图生视频中... ({elapsed}s)")
 
-        op_name = result.get("name")
-        if not op_name:
-            print(f"  ⚠️ 未获取到操作 ID: {json.dumps(result, ensure_ascii=False)[:200]}")
-            return False
-
-        print(f"  📋 操作: {op_name}")
-        data = _poll_operation(op_name)
-
-        if not data.get("done"):
-            print(f"  ⏳ 图生视频超时: {Path(output_path).name}")
-            return False
-
-        response = data.get("response", {})
-        videos = response.get("generateVideoResponse", {}).get("generatedSamples", [])
-        if not videos:
-            videos = response.get("generatedVideos", [])
-        if not videos:
-            print(f"  ⚠️ 图生视频无结果: {json.dumps(data, ensure_ascii=False)[:300]}")
-            return False
-
-        video_uri = videos[0].get("video", {}).get("uri", "") or videos[0].get("video", {}).get("name", "")
-        if not video_uri:
-            print(f"  ⚠️ 无视频 URI: {json.dumps(videos[0], ensure_ascii=False)[:200]}")
-            return False
-
-        if _download_video(video_uri, output_path):
+        if operation.response and operation.response.generated_videos:
+            video = operation.response.generated_videos[0]
+            client.files.download(file=video.video, download_path=output_path)
             print(f"  ✅ 图生视频: {Path(output_path).name}")
             return True
-        return False
-
-    except requests.HTTPError as e:
-        print(f"  ❌ 图生视频 API 错误: {e.response.status_code} - {e.response.text[:300]}")
-        return False
+        else:
+            print(f"  ⚠️ 图生视频无结果: {Path(output_path).name}")
+            return False
     except Exception as e:
         print(f"  ❌ 图生视频失败: {e}")
         return False
@@ -783,7 +682,7 @@ def main():
         if not ep_dir.exists() or not config_path.exists():
             print(f"⚠️ {ep_num} 不存在或缺少 storyboard_config.json，跳过")
             continue
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config = json.load(f)
         ep_payloads.append((ep_dir, ep_num, config))
 

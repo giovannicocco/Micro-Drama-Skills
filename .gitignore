@@ -13,3 +13,4 @@ __pycache__/
 # （PNG/JPG 不再全局忽略，仅忽略视频文件）
 
 .DS_Store
+notes/

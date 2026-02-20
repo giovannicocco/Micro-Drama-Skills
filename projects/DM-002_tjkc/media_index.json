@@ -15,17 +15,17 @@
   ],
   "episodes": [
     {
-      "episode": "EP24",
+      "episode": "EP01",
       "files": [
         {
-          "filename": "DM-002-EP24-A_storyboard.png",
+          "filename": "DM-002-EP01-A_storyboard.png",
           "type": "image",
-          "size_bytes": 1647114
+          "size_bytes": 1587759
         },
         {
-          "filename": "DM-002-EP24-B_storyboard.png",
+          "filename": "DM-002-EP01-B_storyboard.png",
           "type": "image",
-          "size_bytes": 1705738
+          "size_bytes": 1644013
         }
       ]
     }
