@@ -1,19 +1,20 @@
 ---
 name: generate-media
-description: 短剧媒体生成技能。根据已生成的单部作品目录，调用 Google Gemini API（单一可配置图片模型生成角色图/分镜图，Veo 生成视频），将生成的图片和视频存放到对应各集目录下。支持视觉风格预设配置。关键词：图片生成、视频生成、Gemini、Veo、Google API、分镜图片、角色参考图、media generation、视觉风格。
+description: 短剧媒体生成技能。根据已生成的单部作品目录，调用 Google Gemini API（单一可配置图片模型生成角色图/分镜图），将生成的图片存放到对应各集目录下。支持视觉风格预设配置。关键词：图片生成、Gemini、Google API、分镜图片、角色参考图、media generation、视觉风格。
 ---
 
 # 短剧媒体生成技能 (Generate Media)
 
 ## 概述
 
-本技能用于将 `produce-anime` 技能生成的作品脚本**转化为实际的分镜图片和视频**。生成时会读取作品的视觉风格配置（`visual_style`），将摄影机/镜头/胶片等参数自动注入到 AI 提示词中。当前标准流程：
+本技能用于将 `produce-anime` 技能生成的作品脚本**转化为实际的分镜图片**。生成时会读取作品的视觉风格配置（`visual_style`），将摄影机/镜头/胶片等参数自动注入到 AI 提示词中。当前标准流程：
 1. **先生成角色参考图**：根据 `character_bible.md` 中每个角色的 `AI绘图关键词`，使用**单一配置图片模型**批量生成角色图（单次最多7张）
-2. **再生成分镜图片**：按“两集一批”生成分镜图（每集A/B两张，共最多4张/批），角色一致性由同模型多模态提示保证
-3. **最后生成视频（可选）**：基于分镜图与 `video_prompt` 调用 Veo 生成视频
-4. **维护提交任务JSON（同步）**：确保每集 `seedance_tasks.json` 存在且包含12条分镜任务（A/B各6格）
+2. **再生成分镜图片**：按"两集一批"生成分镜图（每集A/B两张，共最多4张/批），角色一致性由同模型多模态提示保证
+3. **维护提交任务JSON（同步）**：确保每集 `seedance_tasks.json` 存在且包含对应任务
 
 生成的媒体文件存放到对应各集的 `EP{xx}/` 目录下。
+
+> **注意**：视频由 Seedance 平台生成，不在本技能中处理。分镜图片作为参考图提交到 Seedance。
 
 ---
 
@@ -57,7 +58,7 @@ pip install google-genai Pillow requests
 目标作品目录必须已由 `produce-anime` 技能生成完毕，包含：
 - `characters/character_bible.md`（角色设定，含 AI 绘图关键词）
 - 各集 `storyboard_config.json`（含 `visual_style` 视觉风格配置）
-- 各集 `seedance_tasks.json`（每分镜对应一条 Seedance 提交任务）
+- 各集 `seedance_tasks.json`（Seedance 提交任务，每集2条：Part-A/B）
 
 ---
 
@@ -81,7 +82,6 @@ pip install google-genai Pillow requests
 短剧媒体生成脚本
 Phase 1: 生成角色参考图
 Phase 2: 参考角色图生成分镜图片
-Phase 3: 参考分镜图生成视频
 """
 import os
 import re
@@ -343,83 +343,10 @@ def generate_image_imagen(prompt: str, output_path: str) -> bool:
         print(f"  ❌ Imagen 失败: {e}")
         return False
 
-# ========== Phase 3: 视频生成 ==========
-
-def generate_video(prompt: str, output_path: str) -> bool:
-    """调用 Veo 生成15秒视频（纯文本）"""
-    try:
-        operation = client.models.generate_videos(
-            model="veo-2.0-generate-001",
-            prompt=prompt,
-            config=types.GenerateVideosConfig(
-                person_generation="ALLOW_ADULT",
-                aspect_ratio="16:9",
-            ),
-        )
-        max_wait = 600
-        elapsed = 0
-        while not operation.done:
-            time.sleep(15)
-            elapsed += 15
-            if elapsed > max_wait:
-                print(f"  ⏳ 视频超时: {Path(output_path).name}")
-                return False
-            operation = client.operations.get(operation)
-            print(f"  ⏳ 视频生成中... ({elapsed}s)")
-
-        if operation.response and operation.response.generated_videos:
-            video = operation.response.generated_videos[0]
-            client.files.download(file=video.video, download_path=output_path)
-            print(f"  ✅ 视频已保存: {Path(output_path).name}")
-            return True
-        else:
-            print(f"  ⚠️ 视频无结果: {Path(output_path).name}")
-            return False
-    except Exception as e:
-        print(f"  ❌ 视频失败: {e}")
-        return False
-
-def generate_video_with_image(prompt: str, image_path: str, output_path: str) -> bool:
-    """调用 Veo 使用参考图生成视频（图生视频）"""
-    try:
-        image_file = client.files.upload(file=image_path)
-        
-        operation = client.models.generate_videos(
-            model="veo-2.0-generate-001",
-            prompt=prompt,
-            image=image_file,
-            config=types.GenerateVideosConfig(
-                person_generation="ALLOW_ADULT",
-                aspect_ratio="16:9",
-            ),
-        )
-        max_wait = 600
-        elapsed = 0
-        while not operation.done:
-            time.sleep(15)
-            elapsed += 15
-            if elapsed > max_wait:
-                print(f"  ⏳ 图生视频超时: {Path(output_path).name}")
-                return False
-            operation = client.operations.get(operation)
-            print(f"  ⏳ 图生视频中... ({elapsed}s)")
-
-        if operation.response and operation.response.generated_videos:
-            video = operation.response.generated_videos[0]
-            client.files.download(file=video.video, download_path=output_path)
-            print(f"  ✅ 图生视频: {Path(output_path).name}")
-            return True
-        else:
-            print(f"  ⚠️ 图生视频无结果: {Path(output_path).name}")
-            return False
-    except Exception as e:
-        print(f"  ❌ 图生视频失败: {e}")
-        return False
-
 # ========== 逐集处理 ==========
 
 def process_episode(ep_dir: Path, ep_num: str, char_uploaded: dict):
-    """处理单集：先分镜图片（参考角色），再视频"""
+    """处理单集：生成分镜图片（参考角色）"""
     config_path = ep_dir / "storyboard_config.json"
     if not config_path.exists():
         print(f"⚠️ {ep_num}: storyboard_config.json 不存在，跳过")
@@ -432,7 +359,7 @@ def process_episode(ep_dir: Path, ep_num: str, char_uploaded: dict):
     print(f"📺 处理 {ep_num}: {config.get('episode_title', '未知')}")
     print(f"{'='*50}")
 
-    results = {"images": 0, "videos": 0, "failed": 0}
+    results = {"images": 0, "failed": 0}
 
     for part_key, part_label in [("part_a", "上"), ("part_b", "下")]:
         part = config.get(part_key)
@@ -442,9 +369,8 @@ def process_episode(ep_dir: Path, ep_num: str, char_uploaded: dict):
         video_id = part["video_id"]
         print(f"\n--- {part_label}半部分 ({video_id}) ---")
 
-        # Phase 2: 生成6宫格分镜图片（参考角色图）
+        # 生成6宫格分镜图片（参考角色图）
         grids = part.get("storyboard_6grid", [])
-        first_grid_image = None
         
         for grid in grids:
             grid_num = grid["grid_number"]
@@ -457,8 +383,6 @@ def process_episode(ep_dir: Path, ep_num: str, char_uploaded: dict):
 
             if os.path.exists(img_path):
                 print(f"  ⏭️ 已存在: {img_filename}")
-                if grid_num == 1:
-                    first_grid_image = img_path
                 results["images"] += 1
                 continue
 
@@ -476,38 +400,10 @@ def process_episode(ep_dir: Path, ep_num: str, char_uploaded: dict):
             
             if success:
                 results["images"] += 1
-                if grid_num == 1:
-                    first_grid_image = img_path
             else:
                 results["failed"] += 1
 
             time.sleep(2)
-
-        # Phase 3: 生成视频
-        video_prompt = part.get("video_prompt", "")
-        if video_prompt:
-            video_filename = f"{video_id}.mp4"
-            video_path = str(ep_dir / video_filename)
-
-            if os.path.exists(video_path):
-                print(f"  ⏭️ 视频已存在: {video_filename}")
-                results["videos"] += 1
-            else:
-                if first_grid_image and os.path.exists(first_grid_image):
-                    print(f"  🎬 使用 grid1 参考图生成视频...")
-                    if generate_video_with_image(video_prompt, first_grid_image, video_path):
-                        results["videos"] += 1
-                    else:
-                        print(f"  🔄 降级为纯文本生成...")
-                        if generate_video(video_prompt, video_path):
-                            results["videos"] += 1
-                        else:
-                            results["failed"] += 1
-                else:
-                    if generate_video(video_prompt, video_path):
-                        results["videos"] += 1
-                    else:
-                        results["failed"] += 1
 
     return results
 
@@ -541,8 +437,8 @@ def main():
     char_uploaded = upload_character_refs(char_ref_map) if char_ref_map else {}
     print(f"   已上传 {sum(len(v) for v in char_uploaded.values())} 张角色参考图")
 
-    # ===== Phase 2 & 3: 逐集生成 =====
-    total = {"images": 0, "videos": 0, "failed": 0}
+    # ===== Phase 2: 逐集生成分镜图片 =====
+    total = {"images": 0, "failed": 0}
     
     for ep in range(start_ep, end_ep + 1):
         ep_num = f"EP{ep:02d}"
@@ -563,7 +459,6 @@ def main():
     print(f"🏁 全部完成!")
     print(f"🎨 角色参考图: {sum(len(v) for v in char_ref_map.values())} 张")
     print(f"🖼️ 分镜图片: {total['images']} 张")
-    print(f"🎬 视频: {total['videos']} 个")
     print(f"❌ 失败: {total['failed']} 个")
     print(f"{'='*60}")
 
@@ -613,13 +508,13 @@ if __name__ == "__main__":
 运行脚本，支持多种模式：
 
 ```bash
-# 完整流程：角色参考图 → 分镜图片 → 视频（全25集）
+# 完整流程：角色参考图 → 分镜图片（全25集）
 python3 generate_media.py
 
 # 指定集数范围（如 EP01-EP05）
 python3 generate_media.py 1 5
 
-# 跳过角色参考图生成（已有角色图时，直接生成分镜+视频）
+# 跳过角色参考图生成（已有角色图时，直接生成分镜）
 python3 generate_media.py 1 25 --skip-chars
 ```
 
@@ -627,12 +522,12 @@ python3 generate_media.py 1 25 --skip-chars
 
 脚本执行完成后，验证：
 1. `characters/` 目录包含角色参考图（每角色1张：`{角色名}_ref.png`）
-2. 每集目录包含 2 张分镜 PNG（A/B）+ 可选 2 个 MP4
-3. 每集 `seedance_tasks.json` 仍为 12 条任务，且与 `storyboard_config.json` 分镜一致
+2. 每集目录包含 2 张分镜 PNG（A/B）
+3. 每集 `seedance_tasks.json` 存在且包含 2 条任务（Part-A/B）
 
 ---
 
-## 三阶段生成流程详解
+## 两阶段生成流程详解
 
 ### Phase 1: 角色参考图生成（当前标准）
 
@@ -655,13 +550,7 @@ python3 generate_media.py 1 25 --skip-chars
 | 输出文件 | `EPxx/{video_id}_storyboard.png`（每集2张：A/B） |
 | 失败策略 | **不做单张兜底**（返回不足只记失败） |
 
-### Phase 3: 视频生成
-
-| 步骤 | 说明 |
-|------|------|
-| 优先图生视频 | 使用 Phase 2 的 grid1 分镜图作为参考图 + `video_prompt` 调用 Veo |
-| 降级策略 | 图生视频失败 → 降级为纯文本生成 |
-| 模型 | Veo 2（`veo-2.0-generate-001`），16:9，异步轮询 |
+> **视频生成**：由 Seedance 平台处理。分镜图片和角色参考图作为 `referenceFiles` 提交到 Seedance，由其生成最终视频。
 
 ---
 
@@ -679,7 +568,7 @@ characters/
 └── ...
 ```
 
-### 分镜图片 + 视频
+### 分镜图片
 
 分镜图片命名格式：`{视频编号}_storyboard.png`
 
@@ -687,10 +576,9 @@ characters/
 EP01/
 ├── DM-001-EP01-A_storyboard.png # 上半部分分镜图
 ├── DM-001-EP01-B_storyboard.png # 下半部分分镜图
-├── DM-001-EP01-A.mp4          # 上半部分 视频（15秒）
-├── DM-001-EP01-B.mp4          # 下半部分 视频（15秒）
 ├── dialogue.md                 # 对话脚本（原有）
-└── storyboard_config.json      # 故事板配置（原有）
+├── storyboard_config.json      # 故事板配置（原有）
+└── seedance_tasks.json         # Seedance提交任务（原有）
 ```
 
 ### 各文件说明
@@ -698,7 +586,6 @@ EP01/
 | 文件类型 | 数量/集 | 来源 | 格式 |
 |---------|---------|------|------|
 | 分镜图片 | 2张（A/B各1张） | `storyboard_6grid` + 批量提示词 | PNG |
-| 视频 | 2个（上下各1个） | `video_prompt` | MP4, 15秒 |
 
 ### 全作品统计（以3个主角为例）
 
@@ -707,11 +594,8 @@ EP01/
 | 角色参考图 | 3张（3角色 × 1张） |
 | 总集数 | 25 |
 | 每集分镜图片 | 2张 |
-| 每集视频 | 2个 |
 | **总分镜图片** | **50张** |
-| **总视频** | **50个** |
-| **总媒体文件** | **103个**（3角色图 + 50分镜 + 50视频） |
-| 总视频时长 | 750秒（12分30秒） |
+| **总媒体文件** | **53个**（3角色图 + 50分镜） |
 
 ---
 
@@ -728,33 +612,17 @@ EP01/
     - Phase 2 分镜图批量生成
 - **约束**：全流程只使用这一个图片模型，不混用其他图片模型
 
-### Veo 2（视频生成）
-
-- **模型**：`veo-2.0-generate-001`
-- **用途**：生成每部分15秒的短剧视频
-- **输入**：
-  - **图生视频**：`video_prompt` + grid1 分镜图片（优先）
-  - **文生视频**：`video_prompt`（降级）
-- **输出**：MP4 视频，16:9 比例
-- **特点**：
-  - 异步生成，需轮询等待
-  - 支持参考图输入（角色一致性更好）
-  - 最大等待 10 分钟超时保护
-
 ---
 
 ## API 限流与容错
 
 ### 限流策略
 - 每次图片生成后 **暂停 2 秒**
-- 视频生成轮询间隔 **15 秒**
-- 视频生成最大等待 **10 分钟**
 
 ### 容错机制
 1. **跳过已存在文件**：如文件已存在则跳过，支持断点续传
-2. **图生视频降级**：如果使用参考图生成视频失败，自动降级为纯文本生成
-3. **单个失败不影响全局**：某格/某集失败后继续处理下一个
-4. **集数范围可指定**：支持只生成指定范围的集数，方便重试
+2. **单个失败不影响全局**：某格/某集失败后继续处理下一个
+3. **集数范围可指定**：支持只生成指定范围的集数，方便重试
 
 ### 重试示例
 
@@ -773,18 +641,18 @@ python3 generate_media.py 10 15
 ## 运行指令
 
 用户可以通过以下方式触发本技能：
-- "生成分镜图片和视频"
+- "生成分镜图片"
 - "generate media"
 - "生成短剧媒体"
 - "调用API生成图片"
-- "把分镜变成图片和视频"
+- "把分镜变成图片"
 - "执行媒体生成"
 
 可附带参数：
-- **作品编号**：如 "生成 DM-001 的图片和视频"
+- **作品编号**：如 "生成 DM-001 的图片"
 - **集数范围**：如 "生成第1到第5集的图片"
 - **仅角色图**：`--only-chars`
-- **仅分镜图（不生成视频）**：`--skip-chars --skip-video`
+- **跳过角色图**：`--skip-chars`
 
 ---
 
@@ -797,10 +665,9 @@ python3 generate_media.py 10 15
 - [ ] 生成 `generate_media.py` 脚本到作品目录
 - [ ] **Phase 1**：角色参考图已生成到 `characters/` 目录
 - [ ] **Phase 2**：分镜图片已生成且参考了角色外观
-- [ ] **Phase 3**：视频已生成
-- [ ] 每集 `seedance_tasks.json` 已存在（12条任务）
+- [ ] 每集 `seedance_tasks.json` 已存在（2条任务：Part-A/B）
 - [ ] 验证 `characters/ref_index.json` 已生成
-- [ ] 验证每集目录包含 2 张分镜 PNG（A/B）+ 可选 2 个 MP4
+- [ ] 验证每集目录包含 2 张分镜 PNG（A/B）
 - [ ] 验证 `media_index.json` 已生成
 - [ ] 检查是否有失败项需要重试
 
@@ -829,10 +696,6 @@ python3 generate_media.py 10 15
 🖼️ Phase 2 - 分镜图片（参考角色）
     - 50 张（25集 × A/B各1张）
 
-🎬 Phase 3 - 视频
-  - 50 个（25集 × 上下2部分，各15秒）
-  - 总时长: 12分30秒
-
 ❌ 失败: 0 个
 
 📂 文件结构
@@ -845,10 +708,11 @@ characters/
 EP01/
 ├── DM-001-EP01-A_storyboard.png (上半部分分镜图)
 ├── DM-001-EP01-B_storyboard.png (下半部分分镜图)
-├── DM-001-EP01-A.mp4            (上半部分视频15s，可选)
-├── DM-001-EP01-B.mp4            (下半部分视频15s，可选)
 ├── dialogue.md
-└── storyboard_config.json
+├── storyboard_config.json
+└── seedance_tasks.json
 
 📋 媒体索引：media_index.json
+
+💡 提示：使用 submit_episode.py 提交任务到 Seedance 生成视频
 ```
