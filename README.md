@@ -1,73 +1,73 @@
 # Micro-Drama-Skills 🎬
 
-AI 驱动的短剧全流程自动化制作系统。通过 Claude Skills 实现从剧本编写、角色设计、分镜生成到视频提交的完整工作流。
+Sistema de produção automatizada de micro-dramas de ponta a ponta, impulsionado por IA. Usa Claude Skills para implementar um workflow completo, desde a escrita do roteiro e design de personagens até geração de storyboard e envio de vídeos.
 
-## 项目概述
+## Visão geral do projeto
 
-本项目提供一套 **Claude 技能（Skills）**，用于自动化生成短剧作品。每部作品包含 25 集（每集 30 秒），系统自动生成剧本、角色设定、6 宫格分镜图、故事板配置，并可调用 AI API 生成图片/视频，最终提交到 Seedance 视频生成流水线。
+Este projeto fornece um conjunto de **Claude Skills** para gerar micro-dramas automaticamente. Cada obra contém 25 episódios (30 segundos por episódio). O sistema gera automaticamente o roteiro, a definição dos personagens, storyboards em grade 6-frame, configurações de storyboard e também pode chamar APIs de IA para gerar imagens/vídeos, enviando tudo ao final para a pipeline de geração de vídeo do Seedance.
 
-### 核心能力
+### Capacidades principais
 
-| 技能 | 功能 | 触发指令示例 |
+| Skill | Função | Exemplo de comando de disparo |
 |------|------|-------------|
-| **produce-anime** | 生成完整短剧（剧本+角色+分镜+故事板） | "制作一部科幻短剧" |
-| **generate-media** | 调用 Gemini API 生成角色图/分镜图/视频 | "生成 DM-002 的图片" |
-| **submit-anime-project** | 批量提交任务到 Seedance 视频生成 | "提交 DM-002 到 Seedance" |
+| **produce-anime** | Gera um micro-drama completo (roteiro + personagens + storyboard) | "Produza um micro-drama de ficção científica" |
+| **generate-media** | Chama a API do Gemini para gerar imagens de personagens / storyboards / vídeos | "Gere as imagens de DM-002" |
+| **submit-anime-project** | Envia tarefas em lote para a geração de vídeo do Seedance | "Enviar DM-002 para o Seedance" |
 
-## 目录结构
+## Estrutura de diretórios
 
 ```
 .
-├── .claude/skills/                  # Claude 技能定义
-│   ├── produce-anime/SKILL.md       # 短剧制作技能
-│   ├── generate-media/SKILL.md      # 媒体生成技能
-│   └── submit-anime-project/SKILL.md # 任务提交技能
+├── .claude/skills/                   # Definições das Claude Skills
+│   ├── produce-anime/SKILL.md        # Skill de produção de micro-drama
+│   ├── generate-media/SKILL.md       # Skill de geração de mídia
+│   └── submit-anime-project/SKILL.md # Skill de envio de tarefas
 ├── .config/
-│   ├── api_keys.sample.json         # API 配置示例
-│   ├── api_keys.json                # API 配置（需自行创建，已 gitignore）
-│   └── visual_styles.json           # 视觉风格预设（10 种）
+│   ├── api_keys.sample.json          # Exemplo de configuração de API
+│   ├── api_keys.json                 # Configuração de API (criar manualmente; está no gitignore)
+│   └── visual_styles.json            # Presets de estilo visual (10 opções)
 ├── projects/
-│   ├── index.json                   # 全局作品索引
-│   ├── DM-001_dhgt/                 # 《灯火归途》
-│   └── DM-002_tjkc/                 # 《碳金狂潮》
+│   ├── index.json                    # Índice global de obras
+│   ├── DM-001_dhgt/                  # "Luzes no Caminho de Volta"
+│   └── DM-002_tjkc/                  # "Fúria do Ouro de Carbono"
 └── README.md
 ```
 
-### 单部作品目录结构
+### Estrutura de diretório de uma obra
 
 ```
 DM-002_tjkc/
-├── metadata.json                    # 作品元数据
-├── script/full_script.md            # 完整剧本（25 集）
+├── metadata.json                     # Metadados da obra
+├── script/full_script.md             # Roteiro completo (25 episódios)
 ├── characters/
-│   ├── character_bible.md           # 角色设定集
-│   ├── ref_index.json               # 角色参考图索引
-│   ├── 林策_ref.png                  # 角色参考图（gitignore）
+│   ├── character_bible.md            # Bíblia de personagens
+│   ├── ref_index.json                # Índice de imagens de referência dos personagens
+│   ├── 林策_ref.png                   # Imagem de referência do personagem (gitignore)
 │   └── ...
 ├── episodes/
 │   ├── EP01/
-│   │   ├── dialogue.md              # 对话脚本
-│   │   ├── storyboard_config.json   # 故事板配置（6 宫格 × 上下两部分）
-│   │   ├── seedance_tasks.json      # Seedance 提交任务
-│   │   ├── DM-002-EP01-A_storyboard.png  # 上半分镜图（gitignore）
-│   │   └── DM-002-EP01-B_storyboard.png  # 下半分镜图（gitignore）
+│   │   ├── dialogue.md               # Roteiro de diálogos
+│   │   ├── storyboard_config.json    # Configuração do storyboard (grade 6-frame × duas metades)
+│   │   ├── seedance_tasks.json       # Tarefas de envio ao Seedance
+│   │   ├── DM-002-EP01-A_storyboard.png  # Storyboard da metade superior (gitignore)
+│   │   └── DM-002-EP01-B_storyboard.png  # Storyboard da metade inferior (gitignore)
 │   └── ... (EP01-EP25)
-├── seedance_project_tasks.json      # 全剧任务汇总（50 条）
-├── video_index.json                 # 视频编号索引
-└── generate_media.py                # 媒体生成脚本
+├── seedance_project_tasks.json       # Consolidação das tarefas da obra inteira (50 entradas)
+├── video_index.json                  # Índice de numeração dos vídeos
+└── generate_media.py                 # Script de geração de mídia
 ```
 
-## 快速开始
+## Início rápido
 
-### 1. 配置 API
+### 1. Configurar a API
 
-复制示例配置并填入你的 API Key：
+Copie o arquivo de exemplo e preencha com sua API Key:
 
 ```bash
 cp .config/api_keys.sample.json .config/api_keys.json
 ```
 
-编辑 `.config/api_keys.json`：
+Edite `.config/api_keys.json`:
 
 ```json
 {
@@ -77,7 +77,7 @@ cp .config/api_keys.sample.json .config/api_keys.json
 }
 ```
 
-### 2. 安装依赖
+### 2. Instalar dependências
 
 ```bash
 python -m venv .venv
@@ -85,88 +85,88 @@ source .venv/bin/activate
 pip install google-genai Pillow requests
 ```
 
-### 3. 使用 Claude 技能
+### 3. Usar as Claude Skills
 
-在支持 Claude Skills 的工具（如 Claude Code、OpenClaw 等）中打开本项目，技能会自动加载。
+Abra este projeto em uma ferramenta compatível com Claude Skills (como Claude Code, OpenClaw etc.). As skills serão carregadas automaticamente.
 
-**制作短剧：**
+**Produzir micro-drama:**
 ```
-> 制作一部港风复古短剧
-> 制作一部赛博朋克风格的校园短剧
-```
-
-**生成媒体：**
-```
-> 生成 DM-002 的分镜图片
-> 生成第 1 到第 5 集的图片
+> Produza um micro-drama com estética retrô de Hong Kong
+> Produza um micro-drama escolar em estilo cyberpunk
 ```
 
-**提交任务：**
+**Gerar mídia:**
 ```
-> 提交 DM-002 到 Seedance（模拟模式）
+> Gere as imagens de storyboard de DM-002
+> Gere as imagens do episódio 1 ao episódio 5
 ```
 
-## 视觉风格预设
+**Enviar tarefas:**
+```
+> Enviar DM-002 para o Seedance (modo simulação)
+```
 
-系统内置 10 种电影级视觉风格，制作时可通过名称、ID 或中文名指定：
+## Presets de estilo visual
 
-| ID | 英文名 | 中文名 | 摄影机/特征 |
+O sistema vem com 10 estilos visuais cinematográficos embutidos. Durante a produção, eles podem ser especificados por nome, ID ou nome em chinês.
+
+| ID | Nome em inglês | Nome em chinês | Câmera / características |
 |----|--------|--------|------------|
-| 1 | Cinematic Film | 电影质感 | Panavision Sphero 65, Vision3 500T (**默认**) |
-| 2 | Anime Classic | 经典动漫 | Studio Ghibli 手绘风 |
-| 3 | Cyberpunk Neon | 赛博朋克 | RED Monstro 8K, 霓虹高对比 |
-| 4 | Chinese Ink Painting | 水墨国风 | ARRI ALEXA Mini LF, 水墨渲染 |
-| 5 | Korean Drama | 韩剧氛围 | Sony VENICE 2, 暖色浅景深 |
-| 6 | Dark Thriller | 暗黑悬疑 | ARRI ALEXA 65, 明暗法 |
+| 1 | Cinematic Film | 电影质感 | Panavision Sphero 65, Vision3 500T (**padrão**) |
+| 2 | Anime Classic | 经典动漫 | estilo desenhado à mão do Studio Ghibli |
+| 3 | Cyberpunk Neon | 赛博朋克 | RED Monstro 8K, neon de alto contraste |
+| 4 | Chinese Ink Painting | 水墨国风 | ARRI ALEXA Mini LF, render em tinta chinesa |
+| 5 | Korean Drama | 韩剧氛围 | Sony VENICE 2, tons quentes e pouca profundidade de campo |
+| 6 | Dark Thriller | 暗黑悬疑 | ARRI ALEXA 65, iluminação chiaroscuro |
 | 7 | Vintage Hong Kong | 港风复古 | Kodak Vision3, Cooke Anamorphic |
-| 8 | Wuxia Epic | 武侠大片 | Panavision DXL2, 大场面雾气 |
-| 9 | Soft Romance | 甜蜜恋爱 | Canon C500, 柔焦暖色 |
-| 10 | Documentary Real | 纪实写实 | Sony FX6, 手持自然光 |
+| 8 | Wuxia Epic | 武侠大片 | Panavision DXL2, cenas amplas com névoa |
+| 9 | Soft Romance | 甜蜜恋爱 | Canon C500, foco suave e tons quentes |
+| 10 | Documentary Real | 纪实写实 | Sony FX6, câmera na mão com luz natural |
 
-每种风格的 `prompt_suffix` 会自动追加到所有 AI 生成提示词末尾。可在 `.config/visual_styles.json` 中自定义或新增风格。
+O `prompt_suffix` de cada estilo é automaticamente acrescentado ao final de todos os prompts gerados por IA. Você pode customizar ou adicionar novos estilos em `.config/visual_styles.json`.
 
-## Seedance 任务提交
+## Envio de tarefas para o Seedance
 
-系统将每张分镜图（A/B 各 1 张）映射为 1 个 Seedance 任务，每集 2 个任务，全剧 50 个任务。
+O sistema mapeia cada imagem de storyboard (A/B, 1 imagem cada) para 1 tarefa do Seedance. São 2 tarefas por episódio, totalizando 50 tarefas para a obra inteira.
 
-### 任务 Prompt 结构
+### Estrutura do prompt da tarefa
 
 ```
-(@DM-002-EP01-A_storyboard.png) 为6宫格分镜参考图，
-(@林策_ref.png) 为角色「林策」的参考形象，(@沈璃_ref.png) 为角色「沈璃」...
+(@DM-002-EP01-A_storyboard.png) is a 6-frame storyboard reference image,
+(@林策_ref.png) is the reference appearance for the character “Lin Ce”, (@沈璃_ref.png) is the reference appearance for the character “Shen Li”...
 
-从镜头1开始，不要展示多宫格分镜参考图片。分镜图制作成电影级别的高清影视...
+Starting from shot 1, do not display the multi-frame storyboard reference image. Turn the storyboard into a film-grade HD visual production...
 
-DM-002-EP01-A 第1集「呼吸税时代」上半部分。剧情概要。氛围。
+DM-002-EP01-A Episode 1 "Breath Tax Era" first half. Plot summary. Atmosphere.
 
-镜头1(0.0s-2.5s): 场景描述。(@林策_ref.png)林策动作... 林策说："台词"（情感）
-镜头2(2.5s-5.0s): ...
+Shot 1 (0.0s-2.5s): Scene description. (@林策_ref.png) Lin Ce action... Lin Ce says: "dialogue" (emotion)
+Shot 2 (2.5s-5.0s): ...
 ...
-镜头6(12.5s-15.0s): ...
+Shot 6 (12.5s-15.0s): ...
 ```
 
-### Seedance API
+### API do Seedance
 
-- 服务地址：`http://localhost:3456`
-- 核心接口：`POST /api/tasks/push`
-- 支持批量提交（`tasks` 数组）
-- `realSubmit: false` 为模拟模式，`true` 为真实提交
+- Endereço do serviço: `http://localhost:3456`
+- Endpoint principal: `POST /api/tasks/push`
+- Suporta envio em lote (`tasks` array)
+- `realSubmit: false` = modo simulação, `true` = envio real
 
-## 技术栈
+## Stack de tecnologia
 
-- **AI 技能平台**：Claude Skills（`.claude/skills/`）
-- **图片生成**：Google Gemini（`gemini-2.5-flash-image-preview` / `gemini-3-pro-image-preview`）
-- **视频生成**：Google Veo 2（`veo-2.0-generate-001`）
-- **任务提交**：Seedance 视频生成流水线（HTTP REST API）
-- **运行环境**：Python 3.13+，`google-genai` SDK
+- **Plataforma de skills de IA**: Claude Skills (`.claude/skills/`)
+- **Geração de imagem**: Google Gemini (`gemini-2.5-flash-image-preview` / `gemini-3-pro-image-preview`)
+- **Geração de vídeo**: Google Veo 2 (`veo-2.0-generate-001`)
+- **Envio de tarefas**: pipeline de geração de vídeo do Seedance (HTTP REST API)
+- **Ambiente de execução**: Python 3.13+, SDK `google-genai`
 
-## 已有作品
+## Obras existentes
 
-| 编号 | 名称 | 类型 | 状态 |
+| Código | Nome | Tipo | Status |
 |------|------|------|------|
-| DM-001 | 《灯火归途》 | — | 已编剧 |
-| DM-002 | 《碳金狂潮》 | 科幻/金融/悬疑 | 已编剧 + 分镜图 + 任务已生成 |
+| DM-001 | "Luzes no Caminho de Volta" | — | Roteirizado |
+| DM-002 | "Fúria do Ouro de Carbono" | Ficção científica / finanças / suspense | Roteirizado + storyboard gerado + tarefas geradas |
 
-## License
+## Licença
 
 MIT
